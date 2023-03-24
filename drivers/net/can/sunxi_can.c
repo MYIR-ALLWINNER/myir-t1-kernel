@@ -599,6 +599,7 @@ static int sunxican_probe(struct platform_device *pdev)
 	irq = can_asm_probe(node, num);
 	if (irq < 0) {
 		err = -ENODEV;
+		dev_err(&pdev->dev, "could not get irq\n");
 		goto exit;
 	}
 
