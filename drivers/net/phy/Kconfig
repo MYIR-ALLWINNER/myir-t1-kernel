@@ -437,6 +437,11 @@ config NATIONAL_PHY
 	tristate "National Semiconductor PHYs"
 	---help---
 	  Currently supports the DP83865 PHY.
+	  
+config MOTORCOMM_PHY
+	tristate "Motorcomm PHYs"
+	---help---
+	  Supports the YT8010, YT8510, YT8511, YT8512, YT8531 PHYs.
 
 config NXP_TJA11XX_PHY
 	tristate "NXP TJA11xx PHYs support"
