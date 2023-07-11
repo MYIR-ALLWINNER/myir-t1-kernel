@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/thermal.h>
 #include <linux/reset.h>
+#include <linux/sunxi-sid.h>
 
 #define MAX_SENSOR_NUM	4
 
@@ -170,6 +171,96 @@ static int sun50i_h616_ths_calibrate(struct ths_device *tmdev,
 		 * cdata = 0x800 - [(ft_temp - T) * 1000 / scale]
 		 */
 		delta = (ft_temp * 100 - sunxi_ths_reg2temp(tmdev, reg))
+			/ tmdev->chip->scale;
+		cdata = CALIBRATE_DEFAULT - delta;
+		if (cdata & ~TEMP_CALIB_MASK) {
+			dev_warn(dev, "sensor%d is not calibrated.\n", i);
+
+			continue;
+		}
+
+		offset = (i % 2) * 16;
+		regmap_update_bits(tmdev->regmap,
+				   SUN50I_H616_THS_TEMP_CALIB + (i / 2 * 4),
+				   0xfff << offset,
+				   cdata << offset);
+	}
+
+	tmdev->has_calibration = true;
+	return 0;
+}
+
+#define SUN8IW20_CP_VERSION_OFF		(0x0c)
+#define SUN8IW20_ALDO_CAL_OFF		(0x28)
+#define SUN8IW20_CAL_COM		(8000)
+static int sun8iw20_ths_calibrate(struct ths_device *tmdev,
+				   u16 *caldata, int callen)
+{
+	struct device *dev = tmdev->dev;
+	int i, ft_temp, t0;
+	unsigned int cp_ver, aldo_cal;
+
+	sunxi_get_module_param_from_sid(&cp_ver, SUN8IW20_CP_VERSION_OFF, 4);
+	cp_ver &= 0x3f;
+	dev_info(dev, "sun8iw20 cp version:%d\n", cp_ver);
+
+	if (cp_ver < 17) {
+		sunxi_get_module_param_from_sid(&aldo_cal, SUN8IW20_ALDO_CAL_OFF, 4);
+		aldo_cal &= 0x00ff0000;
+		aldo_cal = aldo_cal >> 16 ;
+		t0 = (aldo_cal - 0x18) * 3500;
+	} else {
+		t0 = 0;
+	}
+
+	if (!caldata[0])
+		return -EINVAL;
+
+	/*
+	 * efuse layout:
+	 *
+	 * 0      11  16     27
+	 * +----------+-------+
+	 * |  temp |  |sensor0|
+	 * +----------+-------+
+	 *
+	 * The calibration data on the H616 is the ambient temperature and
+	 * sensor values that are filled during the factory test stage.
+	 *
+	 * The unit of stored FT temperature is 0.1 degreee celusis.
+	 *
+	 * We need to calculate a delta between measured and caluclated
+	 * register values and this will become a calibration offset.
+	 */
+	ft_temp = caldata[0] & FT_TEMP_MASK;
+
+	for (i = 0; i < tmdev->chip->sensor_num; i++) {
+		int delta, cdata, offset, reg;
+
+		reg = (int)caldata[i + 1] & TEMP_CALIB_MASK;
+
+		/*
+		 * Our calculation formula is like this,
+		 * the temp unit above is Celsius:
+		 *
+		 * T = (sensor_data + a) / b
+		 * cdata = 0x800 - [(ft_temp - T) * b]
+		 *
+		 * b is a floating-point number
+		 * with an absolute value less than 1000.
+		 *
+		 * sunxi_ths_reg2temp uses milli-degrees Celsius,
+		 * with offset and scale parameters.
+		 * T = (sensor_data + a) * 1000 / b
+		 *
+		 * ----------------------------------------------
+		 *
+		 * So:
+		 *
+		 * offset = a, scale = 1000 / b
+		 * cdata = 0x800 - [(ft_temp - T) * 1000 / scale]
+		 */
+		delta = (ft_temp * 100 + SUN8IW20_CAL_COM - sunxi_ths_reg2temp(tmdev, reg) - t0)
 			/ tmdev->chip->scale;
 		cdata = CALIBRATE_DEFAULT - delta;
 		if (cdata & ~TEMP_CALIB_MASK) {
@@ -392,6 +483,17 @@ static const struct ths_thermal_chip sun50iw10p1_ths = {
 static const struct ths_thermal_chip sun8iw20p1_ths = {
 	.sensor_num = 1,
 	.has_bus_clk = true,
+	.offset = -2794,
+	.scale = -67,
+	.ft_deviation = 0,
+	.temp_data_base = SUN50I_H616_THS_TEMP_DATA,
+	.calibrate = sun8iw20_ths_calibrate,
+	.init = sun50i_h616_thermal_init,
+};
+
+static const struct ths_thermal_chip sun20iw1p1_ths = {
+	.sensor_num = 1,
+	.has_bus_clk = true,
 	.offset = -2800,
 	.scale = -67,
 	.ft_deviation = 0,
@@ -400,12 +502,11 @@ static const struct ths_thermal_chip sun8iw20p1_ths = {
 	.init = sun50i_h616_thermal_init,
 };
 
-
 static const struct of_device_id of_ths_match[] = {
 	{ .compatible = "allwinner,sun50iw9p1-ths", .data = &sun50iw9p1_ths },
 	{ .compatible = "allwinner,sun50iw10p1-ths", .data = &sun50iw10p1_ths },
 	{ .compatible = "allwinner,sun8iw20p1-ths", .data = &sun8iw20p1_ths },
-	{ .compatible = "allwinner,sun20iw1p1-ths", .data = &sun8iw20p1_ths },
+	{ .compatible = "allwinner,sun20iw1p1-ths", .data = &sun20iw1p1_ths },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, of_ths_match);
