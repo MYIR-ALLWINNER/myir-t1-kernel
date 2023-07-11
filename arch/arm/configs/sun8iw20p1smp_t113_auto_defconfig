@@ -1958,6 +1958,7 @@ CONFIG_OF_GPIO=y
 # CONFIG_GPIO_PCA953X is not set
 # CONFIG_GPIO_PCF857X is not set
 # CONFIG_GPIO_TPIC2810 is not set
+CONFIG_GPIO_AT9555=y
 # end of I2C GPIO expanders
 
 #
