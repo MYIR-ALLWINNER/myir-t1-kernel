@@ -65,9 +65,44 @@ struct sunxi_tpadc {
 	struct clk *bus_clk;
 	struct clk *mod_clk;
 	struct reset_control *reset;
+	int				tpadc_channel;
 };
 
 struct sunxi_tpadc *sunxi_tpadc;
+
+static int tp_key_hw_init(void __iomem *reg_base)
+{
+	u32 val = 0;
+
+	val = 0XF << 24;
+	val |= 1 << 23;
+	val &= ~(1 << 22); /*sellect HOSC(24MHz)*/
+	val |= 0x3 << 20; /*00:CLK_IN/2,01:CLK_IN/3,10:CLK_IN/6,11:CLK_IN/1*/
+	val |= 0x7f << 0; /*FS DIV*/
+	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_CTL0));
+
+	val = 1 << 4 | 1 << 5; /* select adc mode and enable tp */
+	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_CTL1));
+
+	val = 1 << 16; /* enable date irq */
+	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_INT_CTL));
+
+	val = readl((void __iomem *)(reg_base + REG_TP_KEY_CTL1));
+	val &= ~(0x0f);
+	// val |= 1 << 0;   /* select X1 */
+	// val |= 1 << 3;   /* select X4 */
+	val |= 1 << sunxi_tpadc->tpadc_channel;
+	printk("channel_tpadc val : %d\n",val);
+	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_CTL1));
+
+	/* clear fifo */
+	val = readl((void __iomem *)(reg_base + REG_TP_KEY_INT_CTL));
+	val |= 1 << 4;
+	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_INT_CTL));
+	msleep(500);
+
+	return 0;
+}
 
 static ssize_t
 tpadc_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -93,7 +128,40 @@ tpadc_store(struct device *dev, struct device_attribute *attr, const char *buf, 
 	return 0;
 }
 
-static DEVICE_ATTR(tpadc, 0444, tpadc_show, tpadc_store);
+static ssize_t
+channel_tpadc_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	u32 vol_data;
+
+	vol_data = sunxi_tpadc->tpadc_channel;
+
+	return sprintf(buf, "%d\n", vol_data);
+}
+
+static ssize_t
+channel_tpadc_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
+{
+	if (strncmp(buf, "0", 1) == 0) {
+		sunxi_tpadc->tpadc_channel = 0;
+	} else if (strncmp(buf, "1", 1) == 0) {
+		sunxi_tpadc->tpadc_channel = 1;
+	} else if (strncmp(buf, "2", 1) == 0) {
+		sunxi_tpadc->tpadc_channel = 2;
+	} else if (strncmp(buf, "3", 1) == 0) {
+		sunxi_tpadc->tpadc_channel = 3;
+	} else {
+		pr_err("%s: tpadc channel setting error\n", __func__);
+	}
+	tp_key_hw_init(sunxi_tpadc->reg_base);
+
+	return size;
+}
+
+// static DEVICE_ATTR(tpadc, 0444, tpadc_show, tpadc_store);
+static struct device_attribute tpadc_device_attrs[] = {
+	__ATTR(tpadc, 0444, tpadc_show, tpadc_store),
+	__ATTR(channel_tpadc, 0644, channel_tpadc_show, channel_tpadc_store),
+};
 
 static int sunxi_tp_clk_enable(struct sunxi_tpadc *ts)
 {
@@ -275,35 +343,7 @@ static int tp_key_dts_parse(struct device *pdev, struct sunxi_tpadc *sunxi_tpadc
 	return 0;
 }
 
-static int tp_key_hw_init(void __iomem *reg_base)
-{
-	u32 val = 0;
 
-	val = 0XF << 24;
-	val |= 1 << 23;
-	val &= ~(1 << 22); /*sellect HOSC(24MHz)*/
-	val |= 0x3 << 20; /*00:CLK_IN/2,01:CLK_IN/3,10:CLK_IN/6,11:CLK_IN/1*/
-	val |= 0x7f << 0; /*FS DIV*/
-	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_CTL0));
-
-	val = 1 << 4 | 1 << 5; /* select adc mode and enable tp */
-	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_CTL1));
-
-	val = 1 << 16; /* enable date irq */
-	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_INT_CTL));
-
-	val = readl((void __iomem *)(reg_base + REG_TP_KEY_CTL1));
-	val &= ~(0x0f);
-	val |= 1 << 0;   /* select X1 */
-	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_CTL1));
-
-	/* clear fifo */
-	val = readl((void __iomem *)(reg_base + REG_TP_KEY_INT_CTL));
-	val |= 1 << 4;
-	writel(val, (void __iomem *)(reg_base + REG_TP_KEY_INT_CTL));
-
-	return 0;
-}
 
 static int tp_key_probe(struct platform_device *pdev)
 {
@@ -369,8 +409,13 @@ static int tp_key_probe(struct platform_device *pdev)
 		return -1;
 	}
 
-	if (device_create_file(&input_dev->dev, &dev_attr_tpadc))
-		pr_err("%s: couldn't create device file for status\n", __func__);
+	// if (device_create_file(&input_dev->dev, &dev_attr_tpadc))
+	// 	pr_err("%s: couldn't create device file for status\n", __func__);
+	for (i = 0; i < ARRAY_SIZE(tpadc_device_attrs); i++) {
+		ret = device_create_file(&input_dev->dev, &tpadc_device_attrs[i]);
+		if (ret)
+			pr_err("%s: couldn't create device file for status\n", __func__);
+	}
 
 	return 0;
 }
