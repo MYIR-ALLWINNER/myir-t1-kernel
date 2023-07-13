@@ -2310,7 +2310,7 @@ static void geth_hw_release(struct platform_device *pdev)
 static int geth_probe(struct platform_device *pdev)
 {
 	int ret = 0;
-	printk("==222222==YTR===sunxi gmac driver's version: %s\n", SUNXI_GMAC_VERSION);
+	printk("sunxi gmac driver's version: %s\n", SUNXI_GMAC_VERSION);
 #ifdef CONFIG_RTL8363_NB
 	//use net_device and geth_priv as global variable.
 #else

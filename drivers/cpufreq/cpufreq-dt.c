@@ -99,16 +99,13 @@ static int resources_available(void)
 	const char *name;
 
 	cpu_dev = get_cpu_device(0);
-	///printk("===========YTR=====0x%x\n",cpu_dev);
 	if (!cpu_dev) {
 		printk("failed to get cpu0 device\n");
 		return -ENODEV;
 	}
 
 	cpu_clk = clk_get(cpu_dev, NULL);
-		///printk("========22222===YTR====cpu_clk=0x%x\n",cpu_clk);
 	ret = PTR_ERR_OR_ZERO(cpu_clk);
-	//printk("========22222===YTR====ret=%d\n",ret);
 	if (ret) {
 		/*
 		 * If cpu's clk node is present, but clock is not yet
@@ -128,13 +125,10 @@ static int resources_available(void)
 	/* Platform doesn't require regulator */
 	if (!name)
 		return 0;
-	///printk("========44444===YTR====name=%s\n",name);
 	
 	cpu_reg = regulator_get_optional(cpu_dev, name);
-	///printk("========3333333===YTR====cpu_reg=0x%x\n",cpu_reg);
 	ret = PTR_ERR_OR_ZERO(cpu_reg);
 	
-	///printk("========3333333===YTR====ret=%d\n",ret);
 	if (ret) {
 		/*
 		 * If cpu's regulator supply node is present, but regulator is
@@ -142,7 +136,7 @@ static int resources_available(void)
 		 */
 		 #if 1
 		cpu_reg = (struct regulator *)cpu_clk;
-	printk("========66666===YTR====cpu_reg=0x%x\n",cpu_reg);
+	printk("cpu_reg=0x%x\n",cpu_reg);
 	ret = PTR_ERR_OR_ZERO(cpu_reg);
 	#endif 	
 		
