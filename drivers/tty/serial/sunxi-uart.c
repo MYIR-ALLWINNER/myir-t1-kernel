@@ -43,6 +43,10 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
+
+#include <linux/delay.h>
+#include <uapi/linux/sched/types.h>
+#include <linux/of_gpio.h>
 #include "sunxi-uart.h"
 
 #if defined(CONFIG_SERIAL_SUNXI_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
@@ -191,6 +195,28 @@ static inline void sw_uart_disable_ier_thri(struct uart_port *port)
 	}
 }
 
+
+/********************************************************************/
+/* cet,liudachuan: rs485 delayed rts release control, not used now */
+# if 0
+static enum hrtimer_restart uart_set_rs485(struct hrtimer *u_timer)
+{
+	struct sw_uart_port *sw_uport = container_of(u_timer, struct sw_uart_port, uart_timer);
+	if(sw_uport == NULL)
+	{
+		SERIAL_DBG("faile to get sw_uport\n", __func__);
+		return HRTIMER_NORESTART;
+	}
+	
+	if(sw_uport->rs485_en){
+		gpio_direction_output(sw_uport->rs485oe_io.gpio, sw_uport->rs485_fl);
+	}
+
+	return HRTIMER_NORESTART;
+}
+#endif
+/***********************************************************************************/
+
 static unsigned int sw_uart_handle_rx(struct sw_uart_port *sw_uport, unsigned int lsr)
 {
 	unsigned char ch = 0;
@@ -272,23 +298,66 @@ ignore_char:
 	return lsr;
 }
 
+
+
+/******************************************************************************/
+/* cet,liudachuan: add sw-rs485 support */
+#define BITS_PER_SERIAL_BYTE	10
+#define NANOSECOND_PER_USECONDS	1000
+#define USECONDS_PER_SECOND		1000000
+static void sw_uart_rs485_cal_tout(struct uart_port *port, unsigned int lcr)
+{
+	struct sw_uart_port *sw_uport = UART_TO_SPORT(port);
+	unsigned int bits_per_byte;
+	if (lcr & SUNXI_UART_LCR_PARITY) /*有奇偶的时候，byte=start+8+parity=10*/
+		bits_per_byte = 10;
+	else    /*无奇偶的时候，byte=start+8=9*/
+		bits_per_byte = 9;
+
+	if (sw_uport->baud != 0) {
+		sw_uport->tout = 
+			(bits_per_byte * USECONDS_PER_SECOND) / (sw_uport->baud) * NANOSECOND_PER_USECONDS;
+	}
+	else {
+		sw_uport->tout = 0;
+	}
+}
+
 static void sw_uart_stop_tx(struct uart_port *port)
 {
-#if IS_ENABLED(CONFIG_SERIAL_SUNXI_DMA)
 	struct sw_uart_port *sw_uport = UART_TO_SPORT(port);
+
+#if IS_ENABLED(CONFIG_SERIAL_SUNXI_DMA)
 	struct sw_uart_dma *uart_dma = sw_uport->dma;
 
 	if (uart_dma->use_dma & TX_DMA)
 		sw_uart_stop_dma_tx(sw_uport);
 #endif
 	sw_uart_disable_ier_thri(port);
+	/* cet,liudachuan: delay 1 byte transmit time then turn off rs485 tx-en */
+	if (sw_uport->rs485_en) {
+	   	// hrtimer_start(&sw_uport->uart_timer, sw_uport->tout, HRTIMER_MODE_REL);
+		unsigned char lsr = 0;
+		while ((lsr & SUNXI_UART_LSR_BOTH_EMPTY) != SUNXI_UART_LSR_BOTH_EMPTY) {
+			// cpu_relax();
+			udelay(10);
+			lsr = serial_in(port, SUNXI_UART_LSR);
+		};
+		gpio_direction_output(sw_uport->rs485oe_io.gpio, sw_uport->rs485_fl);
+	}
 }
 
 static void sw_uart_start_tx(struct uart_port *port)
 {
-#if IS_ENABLED(CONFIG_SERIAL_SUNXI_DMA)
 	struct sw_uart_port *sw_uport = UART_TO_SPORT(port);
+	/* cet,liudachuan: rs485 rts = 1 */
+	// serial_out(port, sw_uport->mcr & (~SUNXI_UART_MCR_RTS), SUNXI_UART_MCR);
+	if(sw_uport->rs485_en){
+		// udelay(20);
+		gpio_direction_output(sw_uport->rs485oe_io.gpio, !sw_uport->rs485_fl);
+	}
 
+#if IS_ENABLED(CONFIG_SERIAL_SUNXI_DMA)
 	if (!((sw_uport->dma->use_dma & TX_DMA) && sw_uport->dma->tx_dma_used))
 #endif
 		sw_uart_enable_ier_thri(port);
@@ -342,8 +411,14 @@ static void sw_uart_handle_tx(struct sw_uart_port *sw_uport)
 		uart_write_wakeup(&sw_uport->port);
 		spin_lock(&sw_uport->port.lock);
 	}
-	if (uart_circ_empty(xmit))
-		sw_uart_stop_tx(&sw_uport->port);
+
+	/* cet,liudachuan: add sw-rs485 support */
+	// if (uart_circ_empty(xmit))
+	//     sw_uart_stop_tx(&sw_uport->port);
+	if (!sw_uport->rs485_en) {
+		if (uart_circ_empty(xmit))
+			sw_uart_stop_tx(&sw_uport->port);
+	}
 }
 
 static unsigned int sw_uart_modem_status(struct sw_uart_port *sw_uport)
@@ -354,7 +429,7 @@ static unsigned int sw_uart_modem_status(struct sw_uart_port *sw_uport)
 	sw_uport->msr_saved_flags = 0;
 
 	if (status & SUNXI_UART_MSR_ANY_DELTA && sw_uport->ier & SUNXI_UART_IER_MSI &&
-	    sw_uport->port.state != NULL) {
+		sw_uport->port.state != NULL) {
 		if (status & SUNXI_UART_MSR_TERI)
 			sw_uport->port.icount.rng++;
 		if (status & SUNXI_UART_MSR_DDSR)
@@ -724,12 +799,34 @@ static enum hrtimer_restart sw_uart_report_dma_rx(struct hrtimer *rx_hrtimer)
 
 #endif
 
+
+
+/**
+ * 串口中断实测14-135us,数据发完后gic_handle_irq两次进入中断，第二次才真正进入串口中断，导致整个延迟变大
+ * 通过提高中断线程优先级为4以上，可以解决，时间缩短到(-5-35us),这里优先级设置为1
+ * cet,ljt 2021.10
+*/
+/*static inline void sw_uart_irq_set_pri(struct sw_uart_port *sw_uport)
+{
+    struct sched_param param = { .sched_priority = MAX_USER_RT_PRIO - 2 };
+	if (sw_uport->irq_pri_promoted)
+		return;
+	if (sched_setscheduler(current, SCHED_FIFO, &param) < 0)
+	{
+		SERIAL_MSG("sched_setscheduler set error\n");
+	}
+	sw_uport->irq_pri_promoted = 1;
+}*/
+
 static irqreturn_t sw_uart_irq(int irq, void *dev_id)
 {
 	struct uart_port *port = dev_id;
 	struct sw_uart_port *sw_uport = UART_TO_SPORT(port);
 	unsigned int iir = 0, lsr = 0;
 	unsigned long flags;
+
+	/* if we hasn't promote the irq priority, set priority to 97 */
+	//sw_uart_irq_set_pri(sw_uport);
 
 	spin_lock_irqsave(&port->lock, flags);
 
@@ -1072,7 +1169,7 @@ static void sw_uart_flush_buffer(struct uart_port *port)
 }
 
 static void sw_uart_set_termios(struct uart_port *port, struct ktermios *termios,
-			    struct ktermios *old)
+				struct ktermios *old)
 {
 	struct sw_uart_port *sw_uport = UART_TO_SPORT(port);
 	unsigned long flags;
@@ -1118,6 +1215,12 @@ static void sw_uart_set_termios(struct uart_port *port, struct ktermios *termios
 	dll = quot & 0xff;
 	dlh = quot >> 8;
 	SERIAL_DBG("set baudrate %d, quot %d\n", baud, quot);
+
+	/* cet,liudachuan: add sw rs485 support */
+	sw_uport->baud = baud;
+	if (sw_uport->rs485_en) {
+		sw_uart_rs485_cal_tout(port, lcr);
+	}
 
 	spin_lock_irqsave(&port->lock, flags);
 	uart_update_timeout(port, termios->c_cflag, baud);
@@ -1379,7 +1482,7 @@ static int sw_uart_ioctl(struct uart_port *port, unsigned int cmd,
 }
 
 static void sw_uart_pm(struct uart_port *port, unsigned int state,
-		      unsigned int oldstate)
+			  unsigned int oldstate)
 {
 #if IS_ENABLED(CONFIG_EVB_PLATFORM)
 	int ret;
@@ -1727,7 +1830,7 @@ static void sw_console_putchar(struct uart_port *port, int c)
 }
 
 static void sw_console_write(struct console *co, const char *s,
-			      unsigned int count)
+				  unsigned int count)
 {
 	struct uart_port *port = NULL;
 	struct sw_uart_port *sw_uport;
@@ -1909,6 +2012,9 @@ static int sw_uart_probe(struct platform_device *pdev)
 	char uart_para[16] = {0};
 	const char *uart_string;
 	int ret = -1;
+	int rs485_en = 0;         //2020.09.24 2¨??? ¨?¨a?¨?RS485????
+	int rs485_fl = 0;
+
 	struct device_node *apk_np = of_find_node_by_name(NULL, "auto_print");
 	const char *apk_sta = NULL;
 #if IS_ENABLED(CONFIG_SERIAL_SUNXI_DMA)
@@ -2052,6 +2158,45 @@ static int sw_uart_probe(struct platform_device *pdev)
 	else
 		sw_uport->card_print = false;
 
+	/* cet,liudachuan: add sw-rs485 support */
+	/************ Modify by wangshunfan @2021.01.11 for this part *************/
+	/* Get rs485 enable flag */
+	snprintf(uart_para, sizeof(uart_para), "uart%d_rs485", pdev->id);
+	ret = of_property_read_u32(np, uart_para, &rs485_en);
+	if (ret) {
+		SERIAL_MSG("error to get uart%d_rs485\n", pdev->id);
+			rs485_en = 0;
+	}
+	sw_uport->rs485_en = rs485_en;
+
+	//SERIAL_DBG("caid rs485_en = %d port = %d", rs485_en, pdev->id);
+	if (sw_uport->rs485_en) {
+		snprintf(uart_para, sizeof(uart_para), "uart%d_485fl", pdev->id);
+		ret = of_property_read_u32(np, uart_para, &rs485_fl);
+		if (ret) {
+			SERIAL_MSG("error to get tuart%d_rs485\n", pdev->id);
+				rs485_fl = 0;
+		}
+		sw_uport->rs485_fl = rs485_fl;
+
+		/* Get rs485 enable control pin, request and init gpio */
+		snprintf(uart_para, sizeof(uart_para), "uart%d_485oe", pdev->id);
+		sw_uport->rs485oe_io.gpio = of_get_named_gpio_flags(np, uart_para, 0,
+			(enum of_gpio_flags *)(&(sw_uport->rs485oe_io)));
+		if (gpio_is_valid(sw_uport->rs485oe_io.gpio)){
+			gpio_request(sw_uport->rs485oe_io.gpio, NULL);
+			gpio_direction_output(sw_uport->rs485oe_io.gpio, sw_uport->rs485_fl);
+		}
+
+		/* Init hrtimer for rs485 and set timeout callback function */
+		// hrtimer_init(&sw_uport->uart_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		// sw_uport->uart_timer.function = uart_set_rs485;
+
+		sw_uport->irq_pri_promoted = 0;
+		SERIAL_MSG("uart%d rs485 enabled\n", pdev->id);
+	}
+	/**************** end of modify by wangshunfan for this part ****************/
+
 	pdata->used = 1;
 	port->iotype = UPIO_MEM;
 	port->type = PORT_SUNXI;
@@ -2129,7 +2274,14 @@ static int sw_uart_remove(struct platform_device *pdev)
 	struct sw_uart_port *sw_uport = platform_get_drvdata(pdev);
 
 	SERIAL_DBG("release uart%d port\n", sw_uport->id);
-#if IS_ENABLED(CONFIG_SERIAL_SUNXI_DMA)
+
+	/* cet,liudachuan: add sw-rs485 support */
+	if (sw_uport->rs485_en) {
+		gpio_free(sw_uport->rs485oe_io.gpio);	/* free gpio of rs485 */
+		// hrtimer_cancel(&sw_uport->uart_timer);	/* canel hrtimer      */
+	}
+
+#ifdef CONFIG_SERIAL_SUNXI_DMA
 	sw_uart_release_dma_tx(sw_uport);
 	sw_uart_release_dma_rx(sw_uport);
 #endif

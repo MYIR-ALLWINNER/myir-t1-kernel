@@ -22,6 +22,8 @@
 #include <linux/dmaengine.h>
 #include <linux/reset.h>
 //include <linux/serial_core.h>
+#include <linux/ktime.h>
+#include <linux/sunxi-gpio.h>
 
 /* SUNXI UART PORT definition*/
 #define PORT_MAX_USED	PORT_LINFLEXUART  /* see include/uapi/linux/serial_core.h */
@@ -106,6 +108,16 @@ struct sw_uart_port {
 	struct serial_rs485 rs485conf;
 	bool card_print;
 	bool throttled;
+
+    /* cet,liudachuan: add rs485 support(not hardware's rs485) */
+    struct gpio_config rs485oe_io;
+    unsigned int rs485_en;
+    unsigned int rs485_fl;
+    struct hrtimer uart_timer;
+    unsigned int baud;
+    int irq_pri_promoted;
+    /* Added by wangshunfan @2021.01.11 for hrtimer timeout */
+	ktime_t tout;
 };
 
 /* register offset define */
@@ -191,6 +203,8 @@ struct sw_uart_port {
 #define SUNXI_UART_LSR_OE         (BIT(1))
 #define SUNXI_UART_LSR_DR         (BIT(0))
 #define SUNXI_UART_LSR_BRK_ERROR_BITS 0x1E /* BI, FE, PE, OE bits */
+/* cet,liudachuan: add BOTH_EMPTY macro */
+#define SUNXI_UART_LSR_BOTH_EMPTY   (SUNXI_UART_LSR_TEMT | SUNXI_UART_LSR_THRE)
 /* Modem Status Register */
 #define SUNXI_UART_MSR_DCD        (BIT(7))
 #define SUNXI_UART_MSR_RI         (BIT(6))
