@@ -1892,10 +1892,10 @@ static void sunxi_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	bool wait_dma = false;
 	u32 imask = 0;
 	u32 cmd_val = 0;
-	u32 arg_pwr_off = ((MMC_SWITCH_MODE_WRITE_BYTE << 24) |
-				(EXT_CSD_POWER_OFF_NOTIFICATION << 16) |
-				(EXT_CSD_POWER_ON << 8) |
-				(EXT_CSD_CMD_SET_NORMAL << 0));
+	// u32 arg_pwr_off = ((MMC_SWITCH_MODE_WRITE_BYTE << 24) |
+	// 			(EXT_CSD_POWER_OFF_NOTIFICATION << 16) |
+	// 			(EXT_CSD_POWER_ON << 8) |
+	// 			(EXT_CSD_CMD_SET_NORMAL << 0));
 	int crypt_flags = 0;
 	struct scatterlist *sg = NULL;
 	int ret;
@@ -1910,12 +1910,12 @@ static void sunxi_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	/*avoid mmc switch to power_off_notification:0x01;
 	 *which Can't accept sudden power failure
 	 */
-	if ((cmd->opcode == MMC_SWITCH) && (cmd->arg == arg_pwr_off)) {
-		dev_err(mmc_dev(mmc), "avoid to switch power_off_notification to POWERED_ON(0x01)\n");
-		mrq->cmd->error = -EBADMSG;
-		sunxi_mmc_request_done(mmc, mrq);
-		return ;
-	}
+	// if ((cmd->opcode == MMC_SWITCH) && (cmd->arg == arg_pwr_off)) {
+	// 	dev_err(mmc_dev(mmc), "avoid to switch power_off_notification to POWERED_ON(0x01)\n");
+	// 	mrq->cmd->error = -EBADMSG;
+	// 	sunxi_mmc_request_done(mmc, mrq);
+	// 	return ;
+	// }
 
 	if (host->sunxi_mmc_on_off_emce) {
 		if (data && data->sg) {
@@ -2550,10 +2550,10 @@ static int sunxi_mmc_resource_request(struct sunxi_mmc_host *host,
 	if (IS_ERR(host->pins_sleep))
 		dev_warn(&pdev->dev, "Cann't get sleep pinstate,check if needed\n");
 
-	host->pins_bias_1v8 = pinctrl_lookup_state(host->pinctrl,
-				"mmc_1v8");
-	if (IS_ERR(host->pins_bias_1v8))
-		dev_warn(&pdev->dev, "Cann't get pin bias hs pinstate,check if needed\n");
+	// host->pins_bias_1v8 = pinctrl_lookup_state(host->pinctrl,
+	// 			"mmc_1v8");
+	// if (IS_ERR(host->pins_bias_1v8))
+	// 	dev_warn(&pdev->dev, "Cann't get pin bias hs pinstate,check if needed\n");
 
 	host->reg_base = devm_ioremap_resource(&pdev->dev,
 					       platform_get_resource(pdev,

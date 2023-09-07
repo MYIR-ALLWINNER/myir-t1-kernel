@@ -203,6 +203,12 @@ static s32 lcd_parse_panel_para(u32 disp, struct disp_panel_para *info)
 	if (ret == 1)
 		info->lcd_lvds_mode = value;
 
+	ret = disp_sys_script_get_item(primary_key, "lcd_lvds_ab_reverse", &value, 1);
+	if (ret == 1)
+	{
+		info->lcd_lvds_ab_reverse = value;
+	}
+
 	ret =
 	    disp_sys_script_get_item(primary_key, "lcd_lvds_colordepth", &value,
 				     1);

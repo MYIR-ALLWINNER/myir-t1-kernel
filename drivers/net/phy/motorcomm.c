@@ -285,9 +285,9 @@ static int yt8512_config_init(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
-	ret = yt8512_clk_init(phydev);
-	if (ret < 0)
-		return ret;
+	// ret = yt8512_clk_init(phydev);
+	// if (ret < 0)
+	// 	return ret;
 
 	ret = yt8512_led_init(phydev);
 

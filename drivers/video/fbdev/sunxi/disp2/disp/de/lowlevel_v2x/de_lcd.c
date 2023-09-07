@@ -900,6 +900,7 @@ s32 tcon0_cfg(u32 sel, struct disp_panel_para *panel)
 		    panel->lcd_lvds_mode;
 		lcd_dev[sel]->tcon0_lvds_ctl.bits.tcon0_lvds_debug_en = 0;
 		lcd_dev[sel]->tcon0_lvds_ctl.bits.tcon0_lvds_correct_mode = 0;
+		lcd_dev[sel]->tcon0_lvds_ctl.bits.tcon0_lvds_even_odd_dir = 1;
 		lcd_dev[sel]->tcon0_lvds_ctl.bits.tcon0_lvds_dir = 0;
 		lcd_dev[sel]->tcon0_lvds_ctl.bits.tcon0_lvds_clk_sel = 1;
 #if defined(LVDS_REVERT)

@@ -758,6 +758,7 @@ struct disp_panel_para {
 	enum disp_lcd_lvds_if lcd_lvds_if;
 	enum disp_lcd_lvds_colordepth lcd_lvds_colordepth;
 	enum disp_lcd_lvds_mode lcd_lvds_mode;
+	unsigned int lcd_lvds_ab_reverse;
 	unsigned int lcd_lvds_io_polarity;
 
 	enum disp_lcd_cpu_if lcd_cpu_if;
