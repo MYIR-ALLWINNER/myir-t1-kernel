@@ -559,6 +559,9 @@ struct registry_priv {
 	u8 unassoc_sta_mode_of_stype[UNASOC_STA_SRC_NUM];
 	u16 max_unassoc_sta_cnt;
 #endif
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+	u8 ap_csa_cnt;
+#endif
 };
 
 /* For registry parameters */
@@ -1061,6 +1064,16 @@ struct rf_ctl_t {
 
 	bool ch_sel_within_same_band;
 
+	u8 ap_csa_ch;
+	u8 ap_csa_switch_cnt;
+	u8 ap_csa_ch_offset;
+	u8 ap_csa_ch_width;
+	u8 ap_csa_en;
+	u8 ap_csa_wait_update_bcn; /* wait beacon update */
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+	u8 ap_csa_cnt_input; /* Input from proc, default value is DEFAULT_CSA_CNT */
+#endif
+
 #if CONFIG_DFS
 	u8 csa_ch;
 	u8 csa_switch_cnt;
@@ -1068,6 +1081,10 @@ struct rf_ctl_t {
 	u8 csa_ch_width;
 	u8 csa_ch_freq_seg0; /* Channel Center Frequency Segment 0 */
 	u8 csa_ch_freq_seg1; /* Channel Center Frequency Segment 1 */
+#ifdef CONFIG_ECSA
+	u8 ecsa_mode;
+	u8 ecsa_op_class;
+#endif
 
 #ifdef CONFIG_DFS_MASTER
 	u8 dfs_region_domain;

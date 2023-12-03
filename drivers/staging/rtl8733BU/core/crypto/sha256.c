@@ -14,7 +14,7 @@
 
 
 /**
- * rtl_hmac_sha256_vector - HMAC-SHA256 over data vector (RFC 2104)
+ * hmac_sha256_vector - HMAC-SHA256 over data vector (RFC 2104)
  * @key: Key for HMAC operations
  * @key_len: Length of the key in bytes
  * @num_elem: Number of elements in the data vector
@@ -47,7 +47,7 @@ int rtl_hmac_sha256_vector(const u8 *key, size_t key_len, size_t num_elem,
 		key_len = 32;
         }
 
-	/* the rtl_hmac_sha256 transform looks like:
+	/* the HMAC_SHA256 transform looks like:
 	 *
 	 * SHA256(K XOR opad, SHA256(K XOR ipad, text))
 	 *
@@ -89,7 +89,7 @@ int rtl_hmac_sha256_vector(const u8 *key, size_t key_len, size_t num_elem,
 
 
 /**
- * rtl_hmac_sha256 - HMAC-SHA256 over data buffer (RFC 2104)
+ * hmac_sha256 - HMAC-SHA256 over data buffer (RFC 2104)
  * @key: Key for HMAC operations
  * @key_len: Length of the key in bytes
  * @data: Pointers to the data area

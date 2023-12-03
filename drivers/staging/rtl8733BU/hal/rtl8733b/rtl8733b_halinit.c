@@ -178,7 +178,14 @@ u8 rtl8733b_hal_init(PADAPTER adapter)
 		err = rtw_halmac_init_hal_fw_file(d, rtw_phy_para_file_path);
 	else
 #endif /* CONFIG_FILE_FWIMG */
-		err = rtw_halmac_init_hal_fw(d, array_mp_8733b_fw_nic, array_length_mp_8733b_fw_nic);
+	{
+#ifdef CONFIG_CCV_FW
+		if (hal->version_id.CUTVersion == 2)	
+			err = rtw_halmac_init_hal_fw(d, ccv_array_mp_8733b_fw_nic, ccv_array_length_mp_8733b_fw_nic);
+		else
+#endif
+			err = rtw_halmac_init_hal_fw(d, array_mp_8733b_fw_nic, array_length_mp_8733b_fw_nic);
+	}
 
 	if (err) {
 		RTW_ERR("%s Download Firmware from %s failed\n", __FUNCTION__, (fw_bin) ? "file" : "array");

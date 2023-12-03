@@ -2095,7 +2095,7 @@ u8 rtl8733b_sethwreg(PADAPTER adapter, u8 variable, u8 *val)
 		break;
 
 	case HW_VAR_ACK_PREAMBLE:
-		hw_var_set_ack_preamble(adapter, *val);
+		/* hw_var_set_ack_preamble(adapter, *val); */
 		break;
 
 /*

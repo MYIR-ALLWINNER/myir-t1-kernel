@@ -679,6 +679,11 @@ int proc_get_smps(struct seq_file *m, void *v);
 int proc_get_defs_param(struct seq_file *m, void *v);
 ssize_t proc_set_defs_param(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
 
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+ssize_t proc_set_ap_csa_cnt(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
+int proc_get_ap_csa_cnt(struct seq_file *m, void *v);
+#endif
+
 #define _drv_always_		1
 #define _drv_emerg_			2
 #define _drv_alert_			3

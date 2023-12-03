@@ -2869,8 +2869,14 @@ static void clear_mbssid_cam(_adapter *padapter, u8 cam_addr)
 
 void rtw_ap_set_mbid_num(_adapter *adapter, u8 ap_num)
 {
+#ifdef CONFIG_RTL8733B
+	/* [7:4] BIT_MBID_BCN_NUM_V2*/
+	rtw_write8(adapter, REG_MBID_NUM,
+		((rtw_read8(adapter, REG_MBID_NUM) & 0x0F) | (((ap_num -1) << 4) & 0xF0)));
+#else
 	rtw_write8(adapter, REG_MBID_NUM,
 		((rtw_read8(adapter, REG_MBID_NUM) & 0xF8) | ((ap_num -1) & 0x07)));
+#endif
 
 }
 void rtw_mbid_cam_enable(_adapter *adapter)
@@ -3023,8 +3029,13 @@ void rtw_ap_multi_bcn_cfg(_adapter *adapter)
 	/*no limit setting - 0x5A7 = 0xFF - Packet in Hi Queue Tx immediately*/
 	rtw_write8(adapter, REG_HIQ_NO_LMT_EN, 0xFF);
 
+#ifdef CONFIG_RTL8733B
+	/* Mask all beacon and enable bcn function will block ac queue */
+	RTW_INFO("%s() skip mask all bcn\n", __func__);
+#else
 	/*Mask all beacon*/
 	rtw_write8(adapter, REG_MBSSID_CTRL, 0);
+#endif
 
 	/*BCN invalid bit setting 0x454[6] = 1*/
 	/*rtw_write8(adapter, REG_CCK_CHECK, rtw_read8(adapter, REG_CCK_CHECK) | BIT_EN_BCN_PKT_REL);*/
@@ -4288,10 +4299,11 @@ s32 rtw_hal_set_default_port_id_cmd(_adapter *adapter, u8 mac_id)
 
 	return ret;
 }
+
 s32 rtw_set_default_port_id(_adapter *adapter)
 {
 	s32 ret = _SUCCESS;
-	struct sta_info		*psta;
+	struct sta_info *psta;
 	struct mlme_priv *pmlmepriv = &adapter->mlmepriv;
 
 	if (is_client_associated_to_ap(adapter)) {
@@ -4299,12 +4311,12 @@ s32 rtw_set_default_port_id(_adapter *adapter)
 		if (psta)
 			ret = rtw_hal_set_default_port_id_cmd(adapter, psta->cmn.mac_id);
 	} else if (check_fwstate(pmlmepriv, WIFI_AP_STATE) == _TRUE) {
-
+		ret = rtw_hal_set_default_port_id_cmd(adapter, 0);
 	} else {
 	}
-
 	return ret;
 }
+
 s32 rtw_set_ps_rsvd_page(_adapter *adapter)
 {
 	s32 ret = _SUCCESS;
@@ -5792,11 +5804,6 @@ static u8 rtw_hal_set_wowlan_ctrl_cmd(_adapter *adapter, u8 enable, u8 change_un
 	if (!ppwrpriv->wowlan_pno_enable &&
 		registry_par->wakeup_event & BIT(0) && !no_wake)
 		magic_pkt = enable;
-
-	if ((registry_par->wakeup_event & BIT(1)) &&
-		(psecpriv->dot11PrivacyAlgrthm == _WEP40_ ||
-		psecpriv->dot11PrivacyAlgrthm == _WEP104_) && !no_wake)
-			hw_unicast = 1;
 
 	if (registry_par->wakeup_event & BIT(2) && !no_wake)
 		discont_wake = enable;
@@ -12493,6 +12500,33 @@ static u8 rtw_hal_set_fw_bcn_early_c2h_rpt_cmd(struct _ADAPTER *adapter, u8 enab
 	return ret;
 }
 
+#ifdef CONFIG_FW_MULTI_PORT_SUPPORT
+u8 rtw_hal_set_ap_bcn_imr_cmd(struct _ADAPTER *adapter, u8 enable)
+{
+	u8 ap_port_id;
+	u8 ret = _FAIL;
+
+	if (!MLME_IS_AP(adapter))
+		goto exit;
+
+	ap_port_id = get_hw_port(adapter);
+	if (ap_port_id != HW_PORT0) {
+		RTW_WARN("AP mode should use port0\n");
+		goto exit;
+	}
+
+	ret = rtw_hal_fill_h2c_cmd(adapter,
+					H2C_SET_AP_BCN_IMR,
+					H2C_AP_BCN_MIR_LEN,
+					&enable);
+
+	RTW_INFO(FUNC_ADPT_FMT" : AP mode %s beacon early IMR\n",
+			FUNC_ADPT_ARG(adapter), enable ? "enable" : "disable");
+exit:
+	return ret;
+}
+#endif
+
 /**
  * rtw_hal_get_rsvd_page_num() - Get needed reserved page number
  * @adapter:	struct _ADAPTER*
@@ -16723,9 +16757,12 @@ void rtw_leave_protsel_macsleep(_adapter *padapter)
 
 void rtw_hal_bcn_early_rpt_c2h_handler(_adapter *padapter)
 {
-
 	if(0)
 		RTW_INFO("Recv Bcn Early report!!\n");
+
+#ifdef CONFIG_AP_MODE
+	rtw_mi_update_csa(padapter);
+#endif
 
 #ifdef CONFIG_TDLS
 #ifdef CONFIG_TDLS_CH_SW
