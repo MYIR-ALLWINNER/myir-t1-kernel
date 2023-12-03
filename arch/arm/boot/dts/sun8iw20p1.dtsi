@@ -905,7 +905,7 @@
 			/*sunxi-dly-104M-ddr  = <1 0 0 0 0>;*/
 			/*sunxi-dly-208M-ddr  = <1 0 0 0 0>;*/
 
-			status = "okay";
+			status = "disabled";
 		};
 
 		/*rtp:rtp@2009c00 {
@@ -1209,7 +1209,7 @@
 			pinctrl-names = "mclk0-default", "mclk0-sleep";
 			pinctrl-0 = <&csi_mclk0_pins_a>;
 			pinctrl-1 = <&csi_mclk0_pins_b>;
-			status = "okay";
+			status = "disabled";
 
 			csi0: csi@5801000{
 				compatible = "allwinner,sunxi-csi";
@@ -1220,7 +1220,7 @@
 				pinctrl-1 = <&csi0_pins_b>;
 				device_id = <0>;
 				iommus = <&mmu_aw 1 1>;
-				status = "okay";
+				status = "disabled";
 			};
 			isp0: isp@5809410 {
 				compatible = "allwinner,sunxi-isp";
